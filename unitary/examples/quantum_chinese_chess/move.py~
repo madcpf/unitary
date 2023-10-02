@@ -1,0 +1,89 @@
+# Copyright 2023 The Unitary Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from unitary.alpha.quantum_effect import QuantumEffect
+from enums import (
+    MoveType,
+    MoveVariant
+)
+
+class Move(QuantumEffect):
+    def __init__(
+        self,
+        source: str,
+        target: str,
+        *,
+        source2: Optional[str] = None,
+        target2: Optional[str] = None,
+        move_type: Optional[MoveType] = None,
+        move_variant: Optional[MoveVariant] = None,
+        measurement: Optional[int] = None,
+    ):
+        self.source = source
+        self.source2 = source2
+        self.target = target
+        self.target2 = target2
+        self.move_type = move_type
+        self.move_variant = move_variant
+        self.measurement = measurement
+
+
+    def __eq__(self, other):
+        if isinstance(other, Move):
+            return (
+                self.source == other.source
+                and self.source2 == other.source2
+                and self.target == other.target
+                and self.target2 == other.target2
+                and self.move_type == other.move_type
+                and self.move_variant == other.move_variant
+                and self.measurement == other.measurement
+            )
+        return False
+
+        @classmethod
+    def from_string(cls, str_to_parse: str):
+        """Creates a move from a string shorthand for tests.                                                                                                                         
+        Format=sources_and_targets[.measurement]:type:variant                                
+                                                                                             
+        where sources_and_targets could be:                                                  
+            a pair of 2-character square strings concatenated together                       
+            s1^t1t2 for split moves with 2 targets                                           
+            s1s2^t1 for merge moves with 2 sources                                           
+                                                                                             
+        Examples:                                                                            
+           'a1a2:JUMP:BASIC'                                                                 
+           'b1^a3c3:SPLIT_JUMP:BASIC'                                                        
+           'b1^a3c3.m0:SPLIT_JUMP:BASIC'                                                     
+           'b1^a3c3.m1:SPLIT_JUMP:BASIC'                                                     
+           'a3b1^c3:MERGE_JUMP:BASIC'                                                        
+        """
+        fields = str_to_parse.split(":")
+        if len(fields) != 3:
+            raise ValueError(f"Invalid move string {str_to_parse}")
+
+        move_and_measurement = fields[0].split(".", maxsplit=1)
+        source_target = move_and_measurement[0]
+        measurement = None
+        if len(move_and_measurement) == 2:
+            _, m_str = move_and_measurement
+            if m_str == "m0":
+                measurement = 0
+            elif m_str == "m1":
+                measurement = 1
+            else:
+                raise ValueError(f"Invalid measurement string {m_str}")
+
+        sources = None
+        targets = None
+        promotion_piece = None
