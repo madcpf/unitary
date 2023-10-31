@@ -543,7 +543,9 @@ class CannonFire(QuantumEffect):
             # In the case where there already is a classical cannon platform, the cannon could
             # fire and capture only if quantum_path_pieces_0 are all empty.
             could_capture = False
-            if len(quantum_path_pieces_0) == 1:
+            if len(quantum_path_pieces_0) == 0:
+                could_capture = True
+            elif len(quantum_path_pieces_0) == 1:
                 # Consider this special case to save an ancilla.
                 # When there is 1 classical path piece and 1 quantum path piece, The cannon
                 # could fire only if the quantum path piece is empty.

@@ -62,10 +62,10 @@ class QuantumEffect(abc.ABC):
         world = objects[0].world
         effects = list(self.effect(*objects))
         if len(effects) > 0:
-            print("### call of QuantumEffect")
-            print(effects)
+            # print("### call of QuantumEffect")
+            # print(effects)
             world.add_effect(effects)
-            print("\n\n")
+            # print("\n\n")
 
     def __str__(self):
         return self.__class__.__name__

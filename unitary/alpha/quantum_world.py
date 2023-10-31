@@ -75,6 +75,7 @@ class QuantumWorld:
         # original qudits to the compiled qubits.
         self.compiled_qubits: Dict[cirq.Qid, List[cirq.Qid]] = {}
         self.post_selection: Dict[QuantumObject, int] = {}
+        self.qubit_remapping_dict: List[Dict[cirq.Qid, cirq.Qid]] = []
 
     def copy(self) -> "QuantumWorld":
         new_objects = []
@@ -96,6 +97,7 @@ class QuantumWorld:
             for circuit, post_selection in self.effect_history
         ]
         new_world.post_selection = new_post_selection
+        # TODO(): copy qubit_remapping_dict with a temp mapping.
         return new_world
 
     def add_object(self, obj: QuantumObject):
@@ -186,7 +188,7 @@ class QuantumWorld:
         new_obj = QuantumObject(ancilla_name, value)
         self.add_object(new_obj)
         self.ancilla_names.add(ancilla_name)
-        print(f"## Add ancilla {ancilla_name}")
+        # print(f"## Add ancilla {ancilla_name}")
         return new_obj
 
     def _append_op(self, op: cirq.Operation):
@@ -251,17 +253,17 @@ class QuantumWorld:
 
     def add_effect(self, op_list: List[cirq.Operation]):
         """Adds an operation to the current circuit."""
-        print("## Add_effect")
-        print(len(self.effect_history))
+        # print("## Add_effect")
+        # print(len(self.effect_history))
         self.effect_history.append(
             (self.circuit.copy(), copy.copy(self.post_selection))
         )
         for op in op_list:
-            print("### op")
-            print(op)
+            # print("### op")
+            # print(op)
             self._append_op(op)
-        print("## Add_effect 2")
-        print(len(self.effect_history))
+        # print("## Add_effect 2")
+        # print(len(self.effect_history))
 
     def undo_last_effect(self):
         """Restores the `QuantumWorld` to the state before the last effect.
@@ -275,8 +277,8 @@ class QuantumWorld:
         if not self.effect_history:
             raise IndexError("No effects to undo")
         self.circuit, self.post_selection = self.effect_history.pop()
-        print("## undo_last_effect")
-        print(len(self.effect_history))
+        # print("## undo_last_effect")
+        # print(len(self.effect_history))
 
     def _suggest_num_reps(self, sample_size: int) -> int:
         """Guess the number of raw samples needed to get sample_size results.
@@ -325,6 +327,7 @@ class QuantumWorld:
             object.qubit: new_ancilla.qubit,
             new_ancilla.qubit: object.qubit,
         }
+        self.qubit_remapping_dict.append(qubit_remapping_dict)
         self.circuit = self.circuit.transform_qubits(
             lambda q: qubit_remapping_dict.get(q, q)
         )
@@ -350,11 +353,12 @@ class QuantumWorld:
             qubit_remapping_dict.update(
                 {*zip(obj_qubits, new_obj_qubits), *zip(new_obj_qubits, obj_qubits)}
             )
-        print("### Before transform_qubits\n", self.circuit)
+        self.qubit_remapping_dict.append(qubit_remapping_dict)
+        # print("### Before transform_qubits\n", self.circuit)
         self.circuit = self.circuit.transform_qubits(
             lambda q: qubit_remapping_dict.get(q, q)
         )
-        print("### After transform_qubits\n", self.circuit)
+        # print("### After transform_qubits\n", self.circuit)
         post_selection = result.value if isinstance(result, enum.Enum) else result
         self.post_selection[new_obj] = post_selection
         if self.use_sparse:
@@ -449,8 +453,8 @@ class QuantumWorld:
         objects: Optional[Sequence[Union[QuantumObject, str]]] = None,
         convert_to_enum: bool = True,
     ) -> List[Union[enum.Enum, int]]:
-        print("## pop")
-        print(len(self.effect_history))
+        # print("## pop")
+        # print(len(self.effect_history))
         self.effect_history.append(
             (self.circuit.copy(), copy.copy(self.post_selection))
         )
@@ -464,8 +468,8 @@ class QuantumWorld:
         results = self.peek(quantum_objects, convert_to_enum=convert_to_enum)
         for idx, result in enumerate(results[0]):
             self.force_measurement(quantum_objects[idx], result)
-        print("## pop 2")
-        print(len(self.effect_history))
+        # print("## pop 2")
+        # print(len(self.effect_history))
 
         return results[0]
 
@@ -665,7 +669,7 @@ class QuantumWorld:
             quantum_object = self.object_name_dict.get(name, None)
             return quantum_object
         except:
-            print("existing")
-            for obj in self.object_name_dict.keys():
-                print(obj)
+            # print("existing")
+            # for obj in self.object_name_dict.keys():
+            #     print(obj)
             raise KeyError(f"{name} did not exist in this world.")

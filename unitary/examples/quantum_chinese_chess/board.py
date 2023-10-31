@@ -112,12 +112,18 @@ class Board:
         peek_result: List[int] = None,
         sublime_terminus=False,
     ):
-        def add_piece_symbol(board_string: str, piece: Piece):
+        def add_piece_symbol(
+            board_string: str,
+            piece: Piece,
+            peek_result: List[int] = None,
+            index: int = 0,
+            sublime_terminus=False,
+        ):
             if peek_result is None and piece.is_entangled:
                 # dim works on mac terminal and gLinux terminal,
                 # but not on sublime terminus
-                if not sublime_terminus:
-                    board_string += dim
+                # if not sublime_terminus:
+                #     board_string += dim
                 if piece.color == Color.RED:
                     board_string += lightred
                 else:
@@ -153,15 +159,19 @@ class Board:
             for col in "abcdefghi":
                 board_string.append(f" {col}  ")
             board_string += "\b" + reset + " \n"
+            index = 0
             for row in range(num_rows):
                 # Print the row index on the left.
                 board_string.append(f"{row}   ")
                 for col in "abcdefghi":
                     piece = self.board[f"{col}{row}"]
-                    add_piece_symbol(board_string, piece)
+                    add_piece_symbol(
+                        board_string, piece, peek_result, index, sublime_terminus
+                    )
                     if col != "i":
                         board_string.append("   ")
                     board_string += reset
+                    index += 1
                 # Print the row index on the right.
                 board_string += f"  {row}" + reset + "\n"
                 # Print the sampled prob. of the pieces in the above row.
@@ -170,7 +180,10 @@ class Board:
                     board_string += grey
                     board_string += black
                     for i in range(row * 9, (row + 1) * 9):
-                        board_string.append("{:.1f} ".format(probabilities[i]))
+                        if probabilities[i] > 0.01 and probabilities[i] < 0.99:
+                            board_string.append("{:.1f} ".format(probabilities[i]))
+                        else:
+                            board_string.append("    ")
                     board_string += "\b" + reset + " \n"
             board_string.append("   ")
             # Print the bottom line of col letters.
@@ -192,14 +205,18 @@ class Board:
                 if col != f_a + 8:
                     board_string += f_space * 2
             board_string += " \n" + reset
+            index = 0
             for row in range(num_rows):
                 # Print the row index on the left.
                 board_string.append(f"{row}" + f_space)
                 for col in "abcdefghi":
                     piece = self.board[f"{col}{row}"]
-                    add_piece_symbol(board_string, piece)
+                    add_piece_symbol(
+                        board_string, piece, peek_result, index, sublime_terminus
+                    )
                     if col != "i":
                         board_string.append(f_space * 2)
+                    index += 1
                 # Print the row index on the right.
                 board_string += f_space * 2 + f"{row}\n"
                 # Print the sampled prob. of the pieces in the above row.

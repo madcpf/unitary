@@ -76,13 +76,16 @@ class QuantumChineseChess:
         print(self.board.to_str())
         self.game_state = GameState.CONTINUES
         self.current_player = self.board.current_player
-        self.debug_level = 3
+        self.debug_level = 0
         # This variable is used to save the length of current effect history before each move is made,
         # so that if we later undo we know how many effects we need to pop out.
         self.effect_history_length = []
         # This variable is used to save the classical properties of the whole board before each move is
         # made, so that if we later undo we could recover the earlier classical state.
         self.classical_properties_history = []
+        # This variable is used to save the length of qubit_remapping_dict before each move is made,
+        # so that if we later undo we know how to remap the qubits.
+        self.qubit_remapping_dict_length = []
 
     @staticmethod
     def parse_input_string(str_to_parse: str) -> Tuple[List[str], List[str]]:
@@ -179,8 +182,8 @@ class QuantumChineseChess:
             if (
                 x1 > ord("f")
                 or x1 < ord("d")
-                or (source_piece.color == Color.RED and y1 < 7)
-                or (source_piece.color == Color.BLACK and y1 > 2)
+                or (source_piece.color == Color.RED and y1 > 2)
+                or (source_piece.color == Color.BLACK and y1 < 7)
             ):
                 raise ValueError("ADVISOR cannot leave the palace.")
         elif source_piece.type_ == Type.KING:
@@ -189,8 +192,8 @@ class QuantumChineseChess:
             if (
                 x1 > ord("f")
                 or x1 < ord("d")
-                or (source_piece.color == Color.RED and y1 < 7)
-                or (source_piece.color == Color.BLACK and y1 > 2)
+                or (source_piece.color == Color.RED and y1 > 2)
+                or (source_piece.color == Color.BLACK and y1 < 7)
             ):
                 raise ValueError("KING cannot leave the palace.")
         elif source_piece.type_ == Type.CANNON:
@@ -209,16 +212,16 @@ class QuantumChineseChess:
             if abs(dx) + abs(dy) != 1:
                 raise ValueError("PAWN cannot move like this.")
             if source_piece.color == Color.RED:
-                if dy == 1:
+                if dy == -1:
                     raise ValueError("PAWN can not move backward.")
-                if y0 > 4 and dy != -1:
+                if y0 <= 4 and dy != 1:
                     raise ValueError(
                         "PAWN can only go forward before crossing the river (i.e. the middle line)."
                     )
             else:
-                if dy == -1:
+                if dy == 1:
                     raise ValueError("PAWN can not move backward.")
-                if y0 <= 4 and dy != 1:
+                if y0 > 4 and dy != -1:
                     raise ValueError(
                         "PAWN can only go forward before crossing the river (i.e. the middle line)."
                     )
@@ -362,7 +365,8 @@ class QuantumChineseChess:
             quantum_pieces_1,
         )
 
-        print(move_type, " ", move_variant)
+        if self.debug_level > 0:
+            print(move_type, " ", move_variant)
 
         if move_type == MoveType.CLASSICAL:
             if source_0.type_ == Type.KING:
@@ -411,7 +415,7 @@ class QuantumChineseChess:
                 )
             )
         elif input_str.lower() == "peek all":
-            all_boards = self.board.board.get_histogram_with_whole_world_as_key()
+            all_boards = self.board.board.get_histogram_with_all_objects_as_key()
             sorted_boards = sorted(all_boards.items(), key=lambda x: x[1], reverse=True)
             for board, count in sorted_boards:
                 print(
@@ -446,6 +450,7 @@ class QuantumChineseChess:
                     piece.reset()
                 elif prob > 1 - 1e-3:
                     piece.is_entangled = False
+        return probs
 
     def game_over(self) -> None:
         """Checks if the game is over, and update self.game_state accordingly."""
@@ -456,7 +461,7 @@ class QuantumChineseChess:
             self.game_state = GameState(1 - self.current_player)
         return
         # TODO(): add the following checks
-        # - If player 0 made N repeatd back-and_forth moves in a row.
+        # - If player 0 made N repeatd back-and-forth moves in a row.
 
     def save_snapshot(self) -> None:
         """Saves the current length of the effect history, and the current classical states of all pieces."""
@@ -471,23 +476,55 @@ class QuantumChineseChess:
                     [piece.type_.value, piece.color.value, piece.is_entangled]
                 )
         self.classical_properties_history.append(snapshot)
+        # Save the current length of qubit_remapping_dict.
+        self.qubit_remapping_dict_length.append(
+            len(self.board.board.qubit_remapping_dict)
+        )
 
     def undo(self) -> None:
-        """Undo the last move, which includes reset quantum effects and classical properties."""
+        """Undo the last move, which includes reset quantum effects and classical properties, and remapping
+        qubits.
+        """
         if (
             len(self.effect_history_length) <= 1
             or len(self.classical_properties_history) <= 1
+            or len(self.qubit_remapping_dict_length) <= 1
         ):
             # length == 1 corresponds to the initial state, and no more undo could be made.
             raise ValueError("Unable to undo any more.")
+
+        world = self.board.board
+        print("Before\n", world.circuit)
+
+        # Recover the mapping of qubits to the last snapshot, and remove any related post selection memory.
+        # Note that this need to be done before calling `undo_last_effect`, otherwise the remapping does not
+        # work as expected.
+        self.qubit_remapping_dict_length.pop()
+        last_length = self.qubit_remapping_dict_length[-1]
+        while len(world.qubit_remapping_dict) > last_length:
+            qubit_remapping_dict = world.qubit_remapping_dict.pop()
+            # test
+            print(qubit_remapping_dict)
+            if len(qubit_remapping_dict) == 0:
+                continue
+            # remap = {}
+            # for key, val in qubit_remapping_dict.items():
+            #     remap[val] = key
+            # print(remap)
+            world.circuit = world.circuit.transform_qubits(
+                lambda q: qubit_remapping_dict.get(q, q)
+            )
+            for obj in qubit_remapping_dict.keys():
+                if obj in world.post_selection:
+                    world.post_selection.pop(obj)
 
         # Recover the effects up to the last snapshot (which was done after the last move finished) by
         # popping effects out of the effect history of the board until its length equals the last
         # snapshot's length.
         self.effect_history_length.pop()
         last_length = self.effect_history_length[-1]
-        while len(self.board.board.effect_history) > last_length:
-            self.board.board.undo_last_effect()
+        while len(world.effect_history) > last_length:
+            world.undo_last_effect()
 
         # Recover the classical properties of all pieces to the last snapshot.
         self.classical_properties_history.pop()
@@ -495,15 +532,26 @@ class QuantumChineseChess:
         index = 0
         for row in range(10):
             for col in "abcdefghi":
-                piece = self.board.board[f"{col}{row}"]
+                piece = world[f"{col}{row}"]
                 piece.type_ = Type(snapshot[index][0])
                 piece.color = Color(snapshot[index][1])
                 piece.is_entangled = snapshot[index][2]
                 index += 1
 
+        # test
+        print("here1", len(world.post_selection))
+        for x, y in world.post_selection.items():
+            print(x.name, y)
+
+        print("\nAfter\n", world.circuit)
+        print("here2", len(world.post_selection))
+        for x, y in world.post_selection.items():
+            print(x.name, y)
+
     def play(self) -> None:
         """The loop where each player takes turn to play."""
         self.save_snapshot()
+        probs = None
         while True:
             move_success, output = self.next_move()
             if not move_success:
@@ -520,6 +568,8 @@ class QuantumChineseChess:
                 probs = self.update_board_by_sampling()
                 # Save the classical states and the current length of effect history.
                 self.save_snapshot()
+            else:
+                probs = self.update_board_by_sampling()
             print(self.board.to_str(probs))
             if self.game_state == GameState.CONTINUES:
                 # If the game continues, switch the player.
